@@ -1,0 +1,18 @@
+# Cargo
+/target/
+Cargo.lock
+
+# Release automation temporary files
+RELEASE_NOTES.md
+release_notes.md
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db

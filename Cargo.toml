@@ -1,0 +1,35 @@
+[package]
+name = "tincan"
+version = "0.1.0"
+edition = "2021"
+authors = [ "SerRat44" ]
+license = "MIT"
+description = "Fine-grained reactive state management with signals and stores for Rust"
+readme = "README.md"
+repository = "https://github.com/SerRat44/tincan"
+homepage = "https://github.com/SerRat44/tincan"
+documentation = "https://docs.rs/tincan"
+keywords = [ "reactive", "state", "signals", "store", "reactivity" ]
+categories = [ "data-structures", "concurrency" ]
+exclude = [ ".github/*", "RELEASE_NOTES.md", "release_notes.md" ]
+
+[dependencies]
+
+[dev-dependencies]
+criterion = "0.8"
+
+[[bench]]
+name = "benchmarks"
+harness = false
+
+# Optional: Configure release-plz behavior
+[package.metadata.release-plz]
+# Automatically update changelog
+changelog_update = true
+# Path to changelog (optional, defaults to CHANGELOG.md)
+changelog_path = "CHANGELOG.md"
+
+# Configure docs.rs build
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = [ "--cfg", "docsrs" ]

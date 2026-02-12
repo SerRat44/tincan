@@ -1,0 +1,20 @@
+[workspace]
+# Changelog update style
+changelog_update = true
+changelog_path = "CHANGELOG.md"
+
+# Git tag format
+git_tag_enable = true
+git_tag_name = "v{{ version }}"
+
+# GitHub release
+git_release_enable = true
+git_release_draft = false
+
+# Semver check
+semver_check = true
+
+[[package]]
+name = "tincan"
+# Package-specific settings
+changelog_include = [ "feat", "fix", "perf", "refactor" ]
