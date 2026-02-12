@@ -1,0 +1,35 @@
+name: Sync Main to Dev
+
+# After releases, sync main back to dev to keep them aligned
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    name: Sync main → dev
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: main
+
+      - name: Configure Git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Sync to dev
+        run: |
+          git fetch origin dev:dev
+          git checkout dev
+          git merge main --no-edit || echo "Merge conflict - manual resolution needed"
+          git push origin dev

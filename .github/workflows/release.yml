@@ -13,7 +13,7 @@ jobs:
   release:
     name: Publish Release
     # Only run if PR was merged and was created by release-plz
-    if: github.event.pull_request.merged == true && startsWith(github.event.pull_request.head.ref, 'release-plz-')
+    if: github.event.pull_request.merged == true && contains(github.event.pull_request.title, 'release')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

@@ -1,0 +1,30 @@
+version: 2
+updates:
+  # Keep Cargo dependencies up to date
+  - package-ecosystem: "cargo"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 5
+    groups:
+      # Group dev dependencies together
+      dev-dependencies:
+        dependency-type: "development"
+      # Group production dependencies together
+      production-dependencies:
+        dependency-type: "production"
+    labels:
+      - "dependencies"
+      - "rust"
+
+  # Keep GitHub Actions up to date
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 3
+    labels:
+      - "dependencies"
+      - "github-actions"
