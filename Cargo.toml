@@ -28,6 +28,8 @@ harness = false
 changelog_update = true
 # Path to changelog (optional, defaults to CHANGELOG.md)
 changelog_path = "CHANGELOG.md"
+# Always create GitHub release even if version is already published
+git_release_enable = true
 
 # Configure docs.rs build
 [package.metadata.docs.rs]
