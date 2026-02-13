@@ -2,6 +2,40 @@ use crate::runtime::ReactiveRuntime;
 use std::sync::{Arc, Mutex, RwLock, Weak};
 
 /// A reactive signal that holds a value and notifies subscribers when changed.
+///
+/// Signals are the core primitive for building reactive applications. They automatically
+/// track dependencies and notify watchers when values change.
+///
+/// # Examples
+///
+/// Basic usage:
+///
+/// ```
+/// use tincan::Signal;
+///
+/// let count = Signal::new(0);
+/// assert_eq!(count.get(), 0);
+///
+/// count.set(42);
+/// assert_eq!(count.get(), 42);
+/// ```
+///
+/// Derived signals with map:
+///
+/// ```
+/// use tincan::Signal;
+/// use std::thread;
+/// use std::time::Duration;
+///
+/// let celsius = Signal::new(0);
+/// let fahrenheit = celsius.map(|c| c * 9 / 5 + 32);
+///
+/// assert_eq!(fahrenheit.get(), 32);
+///
+/// celsius.set(100);
+/// thread::sleep(Duration::from_millis(10));
+/// assert_eq!(fahrenheit.get(), 212);
+/// ```
 #[derive(Clone)]
 pub struct Signal<T> {
     value: Arc<RwLock<T>>,
@@ -11,6 +45,15 @@ pub struct Signal<T> {
 
 impl<T: Clone + Send + Sync + 'static> Signal<T> {
     /// Create a new signal with the given initial value.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use tincan::Signal;
+    ///
+    /// let signal = Signal::new(42);
+    /// assert_eq!(signal.get(), 42);
+    /// ```
     pub fn new(initial: T) -> Self {
         let runtime = ReactiveRuntime::current();
         let id = runtime.next_id();
@@ -23,6 +66,18 @@ impl<T: Clone + Send + Sync + 'static> Signal<T> {
     }
 
     /// Get the current value of the signal.
+    ///
+    /// This tracks the read in the current reactive context, allowing
+    /// effects and memos to automatically subscribe to changes.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use tincan::Signal;
+    ///
+    /// let count = Signal::new(42);
+    /// assert_eq!(count.get(), 42);
+    /// ```
     pub fn get(&self) -> T {
         let runtime = ReactiveRuntime::current();
         runtime.track_read(self.id);
@@ -30,6 +85,18 @@ impl<T: Clone + Send + Sync + 'static> Signal<T> {
     }
 
     /// Set a new value for the signal.
+    ///
+    /// This will notify all subscribers (effects, memos, watchers).
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use tincan::Signal;
+    ///
+    /// let count = Signal::new(0);
+    /// count.set(42);
+    /// assert_eq!(count.get(), 42);
+    /// ```
     pub fn set(&self, new_value: T) {
         *self.value.write().unwrap() = new_value;
         let runtime = ReactiveRuntime::current();
@@ -37,6 +104,18 @@ impl<T: Clone + Send + Sync + 'static> Signal<T> {
     }
 
     /// Update the value using a function.
+    ///
+    /// This is useful for making modifications based on the current value.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use tincan::Signal;
+    ///
+    /// let count = Signal::new(10);
+    /// count.update(|n| *n += 5);
+    /// assert_eq!(count.get(), 15);
+    /// ```
     pub fn update(&self, f: impl FnOnce(&mut T)) {
         let mut value = self.value.write().unwrap();
         f(&mut *value);
@@ -46,6 +125,18 @@ impl<T: Clone + Send + Sync + 'static> Signal<T> {
     }
 
     /// Read the value with a function without cloning.
+    ///
+    /// The read is still tracked for reactivity.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use tincan::Signal;
+    ///
+    /// let text = Signal::new(String::from("hello"));
+    /// let len = text.with(|s| s.len());
+    /// assert_eq!(len, 5);
+    /// ```
     pub fn with<R>(&self, f: impl FnOnce(&T) -> R) -> R {
         let runtime = ReactiveRuntime::current();
         runtime.track_read(self.id);
@@ -54,11 +145,34 @@ impl<T: Clone + Send + Sync + 'static> Signal<T> {
     }
 
     /// Get the signal's unique ID.
+    ///
+    /// This is mainly used internally by the reactivity system.
     pub fn id(&self) -> usize {
         self.id
     }
 
     /// Watch this signal for changes.
+    ///
+    /// Returns a guard that will unsubscribe when dropped.
+    /// The callback is called immediately with the current value.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use tincan::Signal;
+    /// use std::sync::{Arc, atomic::{AtomicUsize, Ordering}};
+    ///
+    /// let count = Signal::new(0);
+    /// let calls = Arc::new(AtomicUsize::new(0));
+    /// let calls_clone = calls.clone();
+    ///
+    /// let _guard = count.watch(move |_| {
+    ///     calls_clone.fetch_add(1, Ordering::SeqCst);
+    /// });
+    ///
+    /// // Called immediately
+    /// assert_eq!(calls.load(Ordering::SeqCst), 1);
+    /// ```
     pub fn watch<F>(&self, callback: F) -> WatchGuard
     where
         F: Fn(T) + Send + Sync + 'static,
@@ -90,6 +204,26 @@ impl<T: Clone + Send + Sync + 'static> Signal<T> {
     }
 
     /// Create a derived signal by applying a function to this signal's value.
+    ///
+    /// The derived signal automatically updates when the source changes.
+    /// The watcher is kept alive as long as the derived signal exists.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use tincan::Signal;
+    /// use std::thread;
+    /// use std::time::Duration;
+    ///
+    /// let count = Signal::new(5);
+    /// let doubled = count.map(|n| n * 2);
+    ///
+    /// assert_eq!(doubled.get(), 10);
+    ///
+    /// count.set(10);
+    /// thread::sleep(Duration::from_millis(10));
+    /// assert_eq!(doubled.get(), 20);
+    /// ```
     pub fn map<U, F>(&self, f: F) -> Signal<U>
     where
         U: Clone + Send + Sync + 'static,
@@ -110,7 +244,28 @@ impl<T: Clone + Send + Sync + 'static> Signal<T> {
         derived
     }
 
-    /// Combine two signals into one using a function.
+    /// Combine two signals into one.
+    ///
+    /// The combined signal updates when either source changes.
+    /// The watchers are kept alive as long as the combined signal exists.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use tincan::Signal;
+    /// use std::thread;
+    /// use std::time::Duration;
+    ///
+    /// let width = Signal::new(10);
+    /// let height = Signal::new(5);
+    /// let area = width.clone().zip(height.clone()).map(|(w, h)| w * h);
+    ///
+    /// assert_eq!(area.get(), 50);
+    ///
+    /// width.set(20);
+    /// thread::sleep(Duration::from_millis(10));
+    /// assert_eq!(area.get(), 100);
+    /// ```
     pub fn zip<U>(self, other: Signal<U>) -> Signal<(T, U)>
     where
         U: Clone + Send + Sync + 'static,
@@ -139,6 +294,9 @@ impl<T: Clone + Send + Sync + 'static> Signal<T> {
 }
 
 /// RAII guard for signal watchers.
+///
+/// When dropped, automatically unsubscribes the watcher.
+/// You typically don't create this directly - it's returned by [`Signal::watch`].
 pub struct WatchGuard {
     observer_id: usize,
     runtime: Weak<RwLock<crate::runtime::RuntimeInner>>,

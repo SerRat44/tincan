@@ -72,6 +72,32 @@ impl RuntimeInner {
 /// Hybrid reactive runtime for managing reactive primitives.
 ///
 /// Supports both global runtime (default) and scoped runtimes for isolation.
+/// The runtime tracks dependencies between signals, effects, and memos,
+/// and manages the reactive graph.
+///
+/// # Examples
+///
+/// Using the default global runtime:
+///
+/// ```
+/// use tincan::Signal;
+///
+/// let signal = Signal::new(42);
+/// assert_eq!(signal.get(), 42);
+/// ```
+///
+/// Using scoped runtimes for isolation:
+///
+/// ```
+/// use tincan::runtime::ReactiveRuntime;
+/// use tincan::Signal;
+///
+/// ReactiveRuntime::scope(|| {
+///     let signal = Signal::new(0);
+///     assert_eq!(signal.get(), 0);
+/// });
+/// // Runtime and all its state is dropped here
+/// ```
 pub struct ReactiveRuntime {
     next_id: AtomicUsize,
     inner: Arc<RwLock<RuntimeInner>>,
@@ -84,6 +110,18 @@ thread_local! {
 
 impl ReactiveRuntime {
     /// Create a new isolated runtime.
+    ///
+    /// This creates a completely independent reactive runtime with its own
+    /// dependency graph. Useful for testing or creating isolated contexts.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use tincan::runtime::ReactiveRuntime;
+    ///
+    /// let runtime = ReactiveRuntime::new();
+    /// // Use with ReactiveRuntime::with_runtime()
+    /// ```
     pub fn new() -> Arc<Self> {
         Arc::new(ReactiveRuntime {
             next_id: AtomicUsize::new(0),
@@ -92,6 +130,9 @@ impl ReactiveRuntime {
     }
 
     /// Get the current reactive runtime (scoped or global fallback).
+    ///
+    /// Returns the runtime from the top of the thread-local stack,
+    /// or the global runtime if no scoped runtime is active.
     pub fn current() -> Arc<Self> {
         RUNTIME_STACK.with(|stack| {
             stack
@@ -103,6 +144,8 @@ impl ReactiveRuntime {
     }
 
     /// Get or create the global runtime (fallback).
+    ///
+    /// This is used as the default runtime when no scoped runtime is active.
     pub fn global() -> Arc<Self> {
         use std::sync::OnceLock;
         static RUNTIME: OnceLock<Arc<ReactiveRuntime>> = OnceLock::new();
@@ -112,13 +155,18 @@ impl ReactiveRuntime {
     /// Run a function with a fresh isolated runtime.
     ///
     /// Useful for testing or creating isolated reactive contexts.
+    /// The runtime and all its state is automatically cleaned up when
+    /// the function returns.
     ///
-    /// # Example
+    /// # Examples
     ///
-    /// ```ignore
+    /// ```
+    /// use tincan::runtime::ReactiveRuntime;
+    /// use tincan::Signal;
+    ///
     /// ReactiveRuntime::scope(|| {
     ///     let signal = Signal::new(0);
-    ///     // This runs in a completely fresh runtime
+    ///     assert_eq!(signal.get(), 0);
     /// });
     /// // Runtime and all its state is dropped here
     /// ```
@@ -131,6 +179,22 @@ impl ReactiveRuntime {
     }
 
     /// Run a function with a specific runtime as the current context.
+    ///
+    /// This pushes the runtime onto the thread-local stack for the duration
+    /// of the function execution.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use tincan::runtime::ReactiveRuntime;
+    /// use tincan::Signal;
+    ///
+    /// let runtime = ReactiveRuntime::new();
+    /// ReactiveRuntime::with_runtime(runtime, || {
+    ///     let signal = Signal::new(42);
+    ///     assert_eq!(signal.get(), 42);
+    /// });
+    /// ```
     pub fn with_runtime<F, R>(runtime: Arc<Self>, f: F) -> R
     where
         F: FnOnce() -> R,
@@ -153,7 +217,22 @@ impl ReactiveRuntime {
 
     /// Clear all observers, dependencies, and state from this runtime.
     ///
-    /// Useful for resetting between tests.
+    /// Useful for resetting between tests. This removes all tracked
+    /// dependencies, observers, and resets the ID counter.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use tincan::runtime::ReactiveRuntime;
+    /// use tincan::Signal;
+    ///
+    /// let runtime = ReactiveRuntime::new();
+    /// ReactiveRuntime::with_runtime(runtime.clone(), || {
+    ///     let _signal = Signal::new(42);
+    /// });
+    ///
+    /// runtime.clear(); // Clean up all state
+    /// ```
     pub fn clear(&self) {
         let mut inner = self.inner.write().unwrap();
         inner.clear();
