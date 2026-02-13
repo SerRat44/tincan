@@ -1,3 +1,4 @@
 mod context;
 
-pub(crate) use context::{ReactiveRuntime, RuntimeInner};
+pub use context::ReactiveRuntime;
+pub(crate) use context::RuntimeInner;
