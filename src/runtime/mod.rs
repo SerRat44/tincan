@@ -5,4 +5,4 @@
 
 mod context;
 
-pub(crate) use context::ReactiveRuntime;
+pub(crate) use context::{ReactiveRuntime, RuntimeInner};

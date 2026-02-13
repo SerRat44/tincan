@@ -4,12 +4,12 @@ version = "0.1.1"
 edition = "2021"
 authors = [ "SerRat44" ]
 license = "MIT"
-description = "Fine-grained reactive state management with signals and stores for Rust"
+description = "A fine-grained reactive state management library for Rust."
 readme = "README.md"
 repository = "https://github.com/SerRat44/tincan"
 homepage = "https://github.com/SerRat44/tincan"
-documentation = "https://docs.rs/tincan"
-keywords = [ "reactive", "state", "signals", "store", "reactivity" ]
+documentation = "https://github.com/SerRat44/tincan"
+keywords = [ "state", "signals", "store" ]
 categories = [ "data-structures", "concurrency" ]
 exclude = [ ".github/*", "RELEASE_NOTES.md", "release_notes.md" ]
 

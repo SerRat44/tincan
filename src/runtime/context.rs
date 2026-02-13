@@ -1,7 +1,28 @@
-use std::cell::RefCell;
 use std::collections::{HashMap, HashSet};
 use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex, RwLock};
+
+/// Inner runtime state that can be shared.
+pub struct RuntimeInner {
+    context: Mutex<ReactiveContext>,
+}
+
+impl RuntimeInner {
+    pub fn remove_observer(&mut self, observer_id: usize) {
+        let mut ctx = self.context.lock().unwrap();
+        // Remove observer
+        ctx.observers.remove(&observer_id);
+
+        // Clear dependencies
+        if let Some(old_deps) = ctx.observer_deps.remove(&observer_id) {
+            for signal_id in old_deps {
+                if let Some(deps) = ctx.dependencies.get_mut(&signal_id) {
+                    deps.remove(&observer_id);
+                }
+            }
+        }
+    }
+}
 
 /// Global reactive runtime for managing reactive primitives.
 ///
@@ -12,16 +33,25 @@ use std::sync::Arc;
 /// - Effect scheduling
 pub struct ReactiveRuntime {
     next_id: AtomicUsize,
+    inner: Arc<RwLock<RuntimeInner>>,
 }
 
 impl ReactiveRuntime {
     /// Get or create the current reactive runtime.
     pub fn current() -> &'static Self {
-        // Use a simple static instance for ID generation
-        static RUNTIME: ReactiveRuntime = ReactiveRuntime {
+        use std::sync::OnceLock;
+        static RUNTIME: OnceLock<ReactiveRuntime> = OnceLock::new();
+        RUNTIME.get_or_init(|| ReactiveRuntime {
             next_id: AtomicUsize::new(0),
-        };
-        &RUNTIME
+            inner: Arc::new(RwLock::new(RuntimeInner {
+                context: Mutex::new(ReactiveContext::new()),
+            })),
+        })
+    }
+
+    /// Get a reference to the inner runtime state.
+    pub fn inner(&self) -> Arc<RwLock<RuntimeInner>> {
+        Arc::clone(&self.inner)
     }
 
     /// Generate the next unique ID for a reactive primitive.
@@ -32,7 +62,7 @@ impl ReactiveRuntime {
     /// Track a read of a signal by the current observer.
     pub fn track_read(&self, signal_id: usize) {
         CONTEXT.with(|ctx| {
-            let mut ctx = ctx.borrow_mut();
+            let mut ctx = ctx.lock().unwrap();
             if let Some(current_observer) = ctx.current_observer {
                 // Add dependency: signal -> observer
                 ctx.dependencies
@@ -51,7 +81,7 @@ impl ReactiveRuntime {
     /// Notify all observers that depend on a signal.
     pub fn notify_observers(&self, signal_id: usize) {
         CONTEXT.with(|ctx| {
-            let ctx_ref = ctx.borrow();
+            let ctx_ref = ctx.lock().unwrap();
             if let Some(observers) = ctx_ref.dependencies.get(&signal_id) {
                 // Collect observers to avoid borrow issues
                 let observers: Vec<usize> = observers.iter().copied().collect();
@@ -67,30 +97,38 @@ impl ReactiveRuntime {
     /// Mark an observer (memo or effect) as dirty and propagate to dependents.
     fn mark_observer_dirty(&self, observer_id: usize) {
         let effects_to_run = CONTEXT.with(|ctx| {
-            let ctx_ref = ctx.borrow();
+            let ctx_ref = ctx.lock().unwrap();
             let mut effects_to_run = Vec::new();
 
             // If it's a memo, mark it as dirty
-            if ctx_ref.memo_dirty.borrow().contains_key(&observer_id) {
+            if ctx_ref.memo_dirty.contains_key(&observer_id) {
                 let already_dirty = ctx_ref
                     .memo_dirty
-                    .borrow()
                     .get(&observer_id)
                     .copied()
                     .unwrap_or(false);
                 if !already_dirty {
-                    ctx_ref.memo_dirty.borrow_mut().insert(observer_id, true);
+                    drop(ctx_ref);
+                    CONTEXT.with(|ctx| {
+                        ctx.lock().unwrap().memo_dirty.insert(observer_id, true);
+                    });
 
                     // Recursively mark dependents as dirty
-                    if let Some(dependents) = ctx_ref.dependencies.get(&observer_id) {
-                        let dependents: Vec<usize> = dependents.iter().copied().collect();
-                        drop(ctx_ref);
+                    let dependents = CONTEXT.with(|ctx| {
+                        ctx.lock()
+                            .unwrap()
+                            .dependencies
+                            .get(&observer_id)
+                            .map(|deps| deps.iter().copied().collect::<Vec<_>>())
+                    });
+                    if let Some(dependents) = dependents {
                         for dependent_id in dependents {
                             self.mark_observer_dirty(dependent_id);
                         }
                         return effects_to_run;
                     }
                 }
+                return effects_to_run;
             }
 
             // If it's an effect, collect it for execution
@@ -113,7 +151,7 @@ impl ReactiveRuntime {
         F: Fn() + Send + Sync + 'static,
     {
         CONTEXT.with(|ctx| {
-            let mut ctx = ctx.borrow_mut();
+            let mut ctx = ctx.lock().unwrap();
             // Clear old dependencies for this observer
             if let Some(old_deps) = ctx.observer_deps.remove(&observer_id) {
                 for signal_id in old_deps {
@@ -123,7 +161,7 @@ impl ReactiveRuntime {
                 }
             }
             // Store the observer effect
-            ctx.observers.insert(observer_id, Arc::new(Box::new(f)));
+            ctx.observers.insert(observer_id, Arc::new(f));
         });
     }
 
@@ -133,9 +171,9 @@ impl ReactiveRuntime {
         F: FnOnce() -> R,
     {
         CONTEXT.with(|ctx| {
-            let prev = ctx.borrow_mut().current_observer.replace(observer_id);
+            let prev = ctx.lock().unwrap().current_observer.replace(observer_id);
             let result = f();
-            ctx.borrow_mut().current_observer = prev;
+            ctx.lock().unwrap().current_observer = prev;
             result
         })
     }
@@ -143,16 +181,16 @@ impl ReactiveRuntime {
     /// Register a memo and mark it as clean initially.
     pub fn register_memo(&self, memo_id: usize) {
         CONTEXT.with(|ctx| {
-            ctx.borrow().memo_dirty.borrow_mut().insert(memo_id, true);
+            ctx.lock().unwrap().memo_dirty.insert(memo_id, true);
         });
     }
 
     /// Check if a memo is dirty (needs recomputation).
     pub fn is_memo_dirty(&self, memo_id: usize) -> bool {
         CONTEXT.with(|ctx| {
-            ctx.borrow()
+            ctx.lock()
+                .unwrap()
                 .memo_dirty
-                .borrow()
                 .get(&memo_id)
                 .copied()
                 .unwrap_or(true)
@@ -162,14 +200,14 @@ impl ReactiveRuntime {
     /// Mark a memo as clean (after recomputation).
     pub fn mark_memo_clean(&self, memo_id: usize) {
         CONTEXT.with(|ctx| {
-            ctx.borrow().memo_dirty.borrow_mut().insert(memo_id, false);
+            ctx.lock().unwrap().memo_dirty.insert(memo_id, false);
         });
     }
 }
 
 // Thread-local reactive context for tracking dependencies.
 thread_local! {
-    static CONTEXT: RefCell<ReactiveContext> = RefCell::new(ReactiveContext::new());
+    static CONTEXT: Mutex<ReactiveContext> = Mutex::new(ReactiveContext::new());
 }
 
 struct ReactiveContext {
@@ -179,9 +217,9 @@ struct ReactiveContext {
     // Map from observer ID to set of signal IDs it depends on
     observer_deps: HashMap<usize, HashSet<usize>>,
     // Map from observer ID to the effect function
-    observers: HashMap<usize, Arc<Box<dyn Fn()>>>,
+    observers: HashMap<usize, Arc<dyn Fn() + Send + Sync>>,
     // Map from memo ID to dirty state
-    memo_dirty: RefCell<HashMap<usize, bool>>,
+    memo_dirty: HashMap<usize, bool>,
 }
 
 impl ReactiveContext {
@@ -191,7 +229,7 @@ impl ReactiveContext {
             dependencies: HashMap::new(),
             observer_deps: HashMap::new(),
             observers: HashMap::new(),
-            memo_dirty: RefCell::new(HashMap::new()),
+            memo_dirty: HashMap::new(),
         }
     }
 }

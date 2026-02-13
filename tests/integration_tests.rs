@@ -4,30 +4,49 @@ use std::sync::{
     atomic::{AtomicUsize, Ordering},
     Arc,
 };
-use tincan::{create_effect, create_memo, create_signal, Store};
+use tincan::{Effect, Memo, Signal, Store};
 
 #[test]
 fn signal_integration() {
-    let (count, set_count) = create_signal(0);
+    let count = Signal::new(0);
 
     // Test read
     assert_eq!(count.get(), 0);
 
     // Test write
-    set_count.set(42);
+    count.set(42);
     assert_eq!(count.get(), 42);
 
     // Test update
-    set_count.update(|n| *n += 10);
+    count.update(|n| *n += 10);
     assert_eq!(count.get(), 52);
 }
 
 #[test]
-fn memo_integration() {
-    let (a, set_a) = create_signal(5);
-    let (b, set_b) = create_signal(10);
+fn signal_with() {
+    let text = Signal::new(String::from("hello world"));
+    let len = text.with(|s| s.len());
+    assert_eq!(len, 11);
+}
 
-    let sum = create_memo({
+#[test]
+fn signal_map() {
+    let count = Signal::new(5);
+    let doubled = count.map(|n| n * 2);
+
+    assert_eq!(doubled.get(), 10);
+
+    count.set(10);
+    std::thread::sleep(std::time::Duration::from_millis(10));
+    assert_eq!(doubled.get(), 20);
+}
+
+#[test]
+fn memo_integration() {
+    let a = Signal::new(5);
+    let b = Signal::new(10);
+
+    let sum = Memo::new({
         let a = a.clone();
         let b = b.clone();
         move || a.get() + b.get()
@@ -35,10 +54,10 @@ fn memo_integration() {
 
     assert_eq!(sum.get(), 15);
 
-    set_a.set(20);
+    a.set(20);
     assert_eq!(sum.get(), 30);
 
-    set_b.set(5);
+    b.set(5);
     assert_eq!(sum.get(), 25);
 }
 
@@ -47,9 +66,9 @@ fn effect_integration() {
     let counter = Arc::new(AtomicUsize::new(0));
     let counter_clone = counter.clone();
 
-    let (signal, set_signal) = create_signal(0);
+    let signal = Signal::new(0);
 
-    create_effect({
+    let _effect = Effect::new({
         let signal = signal.clone();
         move || {
             let _ = signal.get();
@@ -59,6 +78,24 @@ fn effect_integration() {
 
     // Effect runs immediately
     assert_eq!(counter.load(Ordering::SeqCst), 1);
+}
+
+#[test]
+fn signal_watch() {
+    let count = Signal::new(0);
+    let counter = Arc::new(AtomicUsize::new(0));
+    let counter_clone = counter.clone();
+
+    let _guard = count.watch(move |_| {
+        counter_clone.fetch_add(1, Ordering::SeqCst);
+    });
+
+    // Called immediately
+    assert_eq!(counter.load(Ordering::SeqCst), 1);
+
+    count.set(5);
+    std::thread::sleep(std::time::Duration::from_millis(10));
+    assert_eq!(counter.load(Ordering::SeqCst), 2);
 }
 
 #[test]
@@ -116,20 +153,20 @@ fn store_subscription() {
 
 #[test]
 fn complex_reactive_chain() {
-    let (input, set_input) = create_signal(1);
+    let input: Signal<i32> = Signal::new(1);
 
-    let doubled = create_memo({
+    let doubled = Memo::new({
         let input = input.clone();
         move || input.get() * 2
     });
 
-    let quadrupled = create_memo({
+    let quadrupled = Memo::new({
         let doubled = doubled.clone();
         move || doubled.get() * 2
     });
 
     assert_eq!(quadrupled.get(), 4);
 
-    set_input.set(5);
+    input.set(5);
     assert_eq!(quadrupled.get(), 20);
 }

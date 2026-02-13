@@ -1,19 +1,19 @@
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
 use std::hint::black_box;
 
-use tincan::{create_memo, create_signal, Store};
+use tincan::{Memo, Signal, Store};
 
 fn signal_creation_benchmark(c: &mut Criterion) {
     c.bench_function("signal_creation", |b| {
         b.iter(|| {
-            let (signal, _) = create_signal(black_box(42));
+            let signal: Signal<i32> = Signal::new(black_box(42));
             signal
         });
     });
 }
 
 fn signal_read_benchmark(c: &mut Criterion) {
-    let (signal, _) = create_signal(42);
+    let signal: Signal<i32> = Signal::new(42);
 
     c.bench_function("signal_read", |b| {
         b.iter(|| {
@@ -23,22 +23,22 @@ fn signal_read_benchmark(c: &mut Criterion) {
 }
 
 fn signal_write_benchmark(c: &mut Criterion) {
-    let (_, set_signal) = create_signal(0);
+    let signal: Signal<i32> = Signal::new(0);
 
     c.bench_function("signal_write", |b| {
         let mut i = 0;
         b.iter(|| {
-            set_signal.set(black_box(i));
+            signal.set(black_box(i));
             i += 1;
         });
     });
 }
 
 fn memo_computation_benchmark(c: &mut Criterion) {
-    let (a, set_a) = create_signal(5);
-    let (b, set_b) = create_signal(10);
+    let a: Signal<i32> = Signal::new(5);
+    let b: Signal<i32> = Signal::new(10);
 
-    let sum = create_memo({
+    let sum = Memo::new({
         let a = a.clone();
         let b = b.clone();
         move || a.get() + b.get()
