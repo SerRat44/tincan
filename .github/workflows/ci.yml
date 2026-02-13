@@ -94,4 +94,4 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
-      - run: cargo run --examples
+      - run: cargo run --example "examples/*"
