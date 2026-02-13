@@ -113,43 +113,11 @@ impl ReactiveRuntime {
     ///
     /// This creates a completely independent reactive runtime with its own
     /// dependency graph. Useful for testing or creating isolated contexts.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use tincan::runtime::ReactiveRuntime;
-    ///
-    /// let runtime = ReactiveRuntime::new();
-    /// // Use with ReactiveRuntime::with_runtime()
-    /// ```
-    pub fn new() -> Arc<Self> {
+    fn new() -> Arc<Self> {
         Arc::new(ReactiveRuntime {
             next_id: AtomicUsize::new(0),
             inner: Arc::new(RwLock::new(RuntimeInner::new())),
         })
-    }
-
-    /// Get the current reactive runtime (scoped or global fallback).
-    ///
-    /// Returns the runtime from the top of the thread-local stack,
-    /// or the global runtime if no scoped runtime is active.
-    pub fn current() -> Arc<Self> {
-        RUNTIME_STACK.with(|stack| {
-            stack
-                .borrow()
-                .last()
-                .cloned()
-                .unwrap_or_else(|| Self::global())
-        })
-    }
-
-    /// Get or create the global runtime (fallback).
-    ///
-    /// This is used as the default runtime when no scoped runtime is active.
-    pub fn global() -> Arc<Self> {
-        use std::sync::OnceLock;
-        static RUNTIME: OnceLock<Arc<ReactiveRuntime>> = OnceLock::new();
-        Arc::clone(RUNTIME.get_or_init(|| Self::new()))
     }
 
     /// Run a function with a fresh isolated runtime.
@@ -176,6 +144,29 @@ impl ReactiveRuntime {
     {
         let runtime = Self::new();
         Self::with_runtime(runtime, f)
+    }
+
+    /// Get or create the global runtime (fallback).
+    ///
+    /// This is used as the default runtime when no scoped runtime is active.
+    pub fn global() -> Arc<Self> {
+        use std::sync::OnceLock;
+        static RUNTIME: OnceLock<Arc<ReactiveRuntime>> = OnceLock::new();
+        Arc::clone(RUNTIME.get_or_init(|| Self::new()))
+    }
+
+    /// Get the current reactive runtime (scoped or global fallback).
+    ///
+    /// Returns the runtime from the top of the thread-local stack,
+    /// or the global runtime if no scoped runtime is active.
+    pub fn current() -> Arc<Self> {
+        RUNTIME_STACK.with(|stack| {
+            stack
+                .borrow()
+                .last()
+                .cloned()
+                .unwrap_or_else(|| Self::global())
+        })
     }
 
     /// Run a function with a specific runtime as the current context.
@@ -383,14 +374,5 @@ impl ReactiveRuntime {
         let inner = self.inner.read().unwrap();
         let mut ctx = inner.context.lock().unwrap();
         ctx.memo_dirty.insert(memo_id, false);
-    }
-}
-
-impl Default for ReactiveRuntime {
-    fn default() -> Self {
-        Self {
-            next_id: AtomicUsize::new(0),
-            inner: Arc::new(RwLock::new(RuntimeInner::new())),
-        }
     }
 }
