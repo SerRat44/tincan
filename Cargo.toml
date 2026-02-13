@@ -11,7 +11,12 @@ homepage = "https://github.com/SerRat44/tincan"
 documentation = "https://docs.rs/tincan"
 keywords = [ "state", "signals", "store" ]
 categories = [ "data-structures", "concurrency" ]
-exclude = [ ".github/*", "RELEASE_NOTES.md", "release_notes.md" ]
+exclude = [
+    ".github/*",
+    "release_plz.toml",
+    "RELEASE_NOTES.md",
+    "release_notes.md",
+]
 
 [dependencies]
 
