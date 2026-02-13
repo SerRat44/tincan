@@ -1,11 +1,12 @@
 use crate::runtime::ReactiveRuntime;
-use std::sync::{Arc, RwLock, Weak};
+use std::sync::{Arc, Mutex, RwLock, Weak};
 
 /// A reactive signal that holds a value and notifies subscribers when changed.
 #[derive(Clone)]
 pub struct Signal<T> {
     value: Arc<RwLock<T>>,
     id: usize,
+    _dependencies: Arc<Mutex<Vec<WatchGuard>>>,
 }
 
 impl<T: Clone + Send + Sync + 'static> Signal<T> {
@@ -17,6 +18,7 @@ impl<T: Clone + Send + Sync + 'static> Signal<T> {
         Self {
             value: Arc::new(RwLock::new(initial)),
             id,
+            _dependencies: Arc::new(Mutex::new(Vec::new())),
         }
     }
 
@@ -88,7 +90,7 @@ impl<T: Clone + Send + Sync + 'static> Signal<T> {
     }
 
     /// Create a derived signal by applying a function to this signal's value.
-    pub fn map<U, F>(&self, f: F) -> (Signal<U>, WatchGuard)
+    pub fn map<U, F>(&self, f: F) -> Signal<U>
     where
         U: Clone + Send + Sync + 'static,
         F: Fn(&T) -> U + Send + Sync + 'static,
@@ -99,17 +101,13 @@ impl<T: Clone + Send + Sync + 'static> Signal<T> {
         let f = Arc::new(f);
 
         // Watch the source and update the derived signal
-        std::mem::forget(source.watch(move |value| {
+        let guard = source.watch(move |value| {
             derived_clone.set(f(&value));
-        }));
+        });
 
-        (
-            derived,
-            WatchGuard {
-                observer_id: source.id(),
-                runtime: Arc::downgrade(&ReactiveRuntime::current().inner()),
-            },
-        )
+        // Store the watch guard to keep the observer alive
+        derived._dependencies.lock().unwrap().push(guard);
+        derived
     }
 
     /// Combine two signals into one using a function.
@@ -121,18 +119,21 @@ impl<T: Clone + Send + Sync + 'static> Signal<T> {
 
         let combined_clone1 = combined.clone();
         let other_clone1 = other.clone();
-        std::mem::forget(self.watch(move |val| {
+        let guard1 = self.watch(move |val| {
             let other_val = other_clone1.get();
             combined_clone1.set((val, other_val));
-        }));
+        });
 
         let combined_clone2 = combined.clone();
         let self_clone = self.clone();
-        std::mem::forget(other.watch(move |val| {
+        let guard2 = other.watch(move |val| {
             let self_val = self_clone.get();
             combined_clone2.set((self_val, val));
-        }));
+        });
 
+        // Store the watch guards to keep the observers alive
+        combined._dependencies.lock().unwrap().push(guard1);
+        combined._dependencies.lock().unwrap().push(guard2);
         combined
     }
 }

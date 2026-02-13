@@ -10,7 +10,7 @@ fn main() {
     // Map: transform signal values
     println!("1. Creating a signal and mapping it");
     let temperature_celsius = Signal::new(25);
-    let (temperature_fahrenheit, _guard) = temperature_celsius.map(|c| c * 9 / 5 + 32);
+    let temperature_fahrenheit = temperature_celsius.map(|c| c * 9 / 5 + 32);
 
     println!(
         "   {}°C = {}°F",
@@ -39,7 +39,7 @@ fn main() {
     println!("\n3. Combining two signals with zip");
     let width = Signal::new(10);
     let height = Signal::new(5);
-    let (area, _guard2) = width.clone().zip(height.clone()).map(|(w, h)| w * h);
+    let area = width.clone().zip(height.clone()).map(|(w, h)| w * h);
 
     println!(
         "   Width: {}, Height: {}, Area: {}",
@@ -72,8 +72,8 @@ fn main() {
     // Chain multiple transformations
     println!("\n6. Chaining transformations");
     let base = Signal::new(2);
-    let (doubled, _guard3) = base.map(|n| n * 2);
-    let (squared, _guard4) = doubled.map(|n| n * n);
+    let doubled = base.map(|n| n * 2);
+    let squared = doubled.map(|n| n * n);
 
     println!(
         "   Base: {}, Doubled: {}, Squared: {}",
