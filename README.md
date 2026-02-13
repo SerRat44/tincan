@@ -1,16 +1,13 @@
 # Tincan
 
 [![Crates.io](https://img.shields.io/crates/v/tincan.svg)](https://crates.io/crates/tincan)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![GitHub](https://img.shields.io/badge/GitHub-tincan-blue.svg)](https://github.com/SerRat44/tincan)
+[![Documentation](https://docs.rs/tincan/badge.svg)](https://docs.rs/tincan)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://github.com/SerRat44/tincan/LICENSE)
 
 ## Overview
 
-A fine-grained reactive state management library for Rust.
-
-Tincan provides two levels of abstraction for building reactive applications:
-
-- **Signals**: Low-level reactive primitives with automatic dependency tracking and functional combinators
-- **Store**: High-level state management for complex application state
+A fine-grained reactive state management library for Rust. Inspired by React's hooks and Solid.js's reactivity, Tincan provides a simple API for creating reactive signals, memoized computations, and side effects. It also includes a high-level Store abstraction for managing complex state.
 
 ### Core Concepts
 
