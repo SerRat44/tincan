@@ -47,6 +47,9 @@ jobs:
       - name: Run tests
         run: cargo test --all-features --verbose
 
+      - name: Build examples
+        run: cargo build --examples --verbose
+
   fmt:
     name: Formatting
     runs-on: ubuntu-latest
@@ -84,3 +87,11 @@ jobs:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - run: cargo bench --no-run
+
+  examples:
+    name: Run Examples
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - run: cargo run --examples

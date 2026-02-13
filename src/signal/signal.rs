@@ -2,9 +2,6 @@ use crate::runtime::ReactiveRuntime;
 use std::sync::{Arc, RwLock, Weak};
 
 /// A reactive signal that holds a value and notifies subscribers when changed.
-///
-/// Signals automatically track dependencies and notify watchers when values change.
-/// This is the core primitive for building reactive applications.
 #[derive(Clone)]
 pub struct Signal<T> {
     value: Arc<RwLock<T>>,
@@ -13,13 +10,6 @@ pub struct Signal<T> {
 
 impl<T: Clone + Send + Sync + 'static> Signal<T> {
     /// Create a new signal with the given initial value.
-    ///
-    /// # Example
-    ///
-    /// ```ignore
-    /// let count = Signal::new(0);
-    /// assert_eq!(count.get(), 0);
-    /// ```
     pub fn new(initial: T) -> Self {
         let runtime = ReactiveRuntime::current();
         let id = runtime.next_id();
@@ -31,16 +21,6 @@ impl<T: Clone + Send + Sync + 'static> Signal<T> {
     }
 
     /// Get the current value of the signal.
-    ///
-    /// This tracks the read in the current reactive context, allowing
-    /// effects and memos to automatically subscribe to changes.
-    ///
-    /// # Example
-    ///
-    /// ```ignore
-    /// let count = Signal::new(42);
-    /// assert_eq!(count.get(), 42);
-    /// ```
     pub fn get(&self) -> T {
         let runtime = ReactiveRuntime::current();
         runtime.track_read(self.id);
@@ -48,16 +28,6 @@ impl<T: Clone + Send + Sync + 'static> Signal<T> {
     }
 
     /// Set a new value for the signal.
-    ///
-    /// This will notify all subscribers (effects, memos, watchers).
-    ///
-    /// # Example
-    ///
-    /// ```ignore
-    /// let count = Signal::new(0);
-    /// count.set(42);
-    /// assert_eq!(count.get(), 42);
-    /// ```
     pub fn set(&self, new_value: T) {
         *self.value.write().unwrap() = new_value;
         let runtime = ReactiveRuntime::current();
@@ -65,16 +35,6 @@ impl<T: Clone + Send + Sync + 'static> Signal<T> {
     }
 
     /// Update the value using a function.
-    ///
-    /// This is useful for making modifications based on the current value.
-    ///
-    /// # Example
-    ///
-    /// ```ignore
-    /// let count = Signal::new(10);
-    /// count.update(|n| *n += 5);
-    /// assert_eq!(count.get(), 15);
-    /// ```
     pub fn update(&self, f: impl FnOnce(&mut T)) {
         let mut value = self.value.write().unwrap();
         f(&mut *value);
@@ -84,15 +44,6 @@ impl<T: Clone + Send + Sync + 'static> Signal<T> {
     }
 
     /// Read the value with a function without cloning.
-    ///
-    /// The read is still tracked for reactivity.
-    ///
-    /// # Example
-    ///
-    /// ```ignore
-    /// let text = Signal::new(String::from("hello"));
-    /// let len = text.with(|s| s.len());
-    /// ```
     pub fn with<R>(&self, f: impl FnOnce(&T) -> R) -> R {
         let runtime = ReactiveRuntime::current();
         runtime.track_read(self.id);
@@ -106,19 +57,6 @@ impl<T: Clone + Send + Sync + 'static> Signal<T> {
     }
 
     /// Watch this signal for changes.
-    ///
-    /// Returns a guard that will unsubscribe when dropped.
-    /// The callback is called immediately with the current value.
-    ///
-    /// # Example
-    ///
-    /// ```ignore
-    /// let count = Signal::new(0);
-    /// let _guard = count.watch(|value| {
-    ///     println!("Count changed to: {}", value);
-    /// });
-    /// count.set(5); // Prints: "Count changed to: 5"
-    /// ```
     pub fn watch<F>(&self, callback: F) -> WatchGuard
     where
         F: Fn(T) + Send + Sync + 'static,
@@ -150,17 +88,7 @@ impl<T: Clone + Send + Sync + 'static> Signal<T> {
     }
 
     /// Create a derived signal by applying a function to this signal's value.
-    ///
-    /// The derived signal updates automatically when the source changes.
-    ///
-    /// # Example
-    ///
-    /// ```ignore
-    /// let count = Signal::new(5);
-    /// let doubled = count.map(|n| n * 2);
-    /// assert_eq!(doubled.get(), 10);
-    /// ```
-    pub fn map<U, F>(&self, f: F) -> Signal<U>
+    pub fn map<U, F>(&self, f: F) -> (Signal<U>, WatchGuard)
     where
         U: Clone + Send + Sync + 'static,
         F: Fn(&T) -> U + Send + Sync + 'static,
@@ -175,20 +103,16 @@ impl<T: Clone + Send + Sync + 'static> Signal<T> {
             derived_clone.set(f(&value));
         }));
 
-        derived
+        (
+            derived,
+            WatchGuard {
+                observer_id: source.id(),
+                runtime: Arc::downgrade(&ReactiveRuntime::current().inner()),
+            },
+        )
     }
 
     /// Combine two signals into one using a function.
-    ///
-    /// The result updates when either source signal changes.
-    ///
-    /// # Example
-    ///
-    /// ```ignore
-    /// let first = Signal::new(1);
-    /// let second = Signal::new(2);
-    /// let sum = Signal::zip(first, second).map(|(a, b)| a + b);
-    /// ```
     pub fn zip<U>(self, other: Signal<U>) -> Signal<(T, U)>
     where
         U: Clone + Send + Sync + 'static,
@@ -214,8 +138,6 @@ impl<T: Clone + Send + Sync + 'static> Signal<T> {
 }
 
 /// RAII guard for signal watchers.
-///
-/// When dropped, automatically unsubscribes the watcher.
 pub struct WatchGuard {
     observer_id: usize,
     runtime: Weak<RwLock<crate::runtime::RuntimeInner>>,
@@ -228,64 +150,5 @@ impl Drop for WatchGuard {
                 runtime.remove_observer(self.observer_id);
             }
         }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn signal_get_set() {
-        let count = Signal::new(0);
-        assert_eq!(count.get(), 0);
-        count.set(42);
-        assert_eq!(count.get(), 42);
-    }
-
-    #[test]
-    fn signal_update() {
-        let count = Signal::new(10);
-        count.update(|n| *n += 5);
-        assert_eq!(count.get(), 15);
-    }
-
-    #[test]
-    fn signal_with() {
-        let text = Signal::new(String::from("hello"));
-        let len = text.with(|s| s.len());
-        assert_eq!(len, 5);
-    }
-
-    #[test]
-    fn signal_map() {
-        let count = Signal::new(5);
-        let doubled = count.map(|n| n * 2);
-        assert_eq!(doubled.get(), 10);
-
-        count.set(10);
-        // Give the update a moment to propagate
-        std::thread::sleep(std::time::Duration::from_millis(10));
-        assert_eq!(doubled.get(), 20);
-    }
-
-    #[test]
-    fn signal_watch() {
-        use std::sync::atomic::{AtomicUsize, Ordering};
-
-        let count = Signal::new(0);
-        let call_count = Arc::new(AtomicUsize::new(0));
-        let call_count_clone = Arc::clone(&call_count);
-
-        let _guard = count.watch(move |_value| {
-            call_count_clone.fetch_add(1, Ordering::SeqCst);
-        });
-
-        // Should be called once immediately
-        assert_eq!(call_count.load(Ordering::SeqCst), 1);
-
-        count.set(5);
-        std::thread::sleep(std::time::Duration::from_millis(10));
-        assert_eq!(call_count.load(Ordering::SeqCst), 2);
     }
 }

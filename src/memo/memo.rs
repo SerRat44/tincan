@@ -2,9 +2,6 @@ use crate::runtime::ReactiveRuntime;
 use std::sync::{Arc, RwLock};
 
 /// A memoized computed value that automatically tracks dependencies.
-///
-/// Memos only recompute when their dependencies change, making them
-/// efficient for expensive computations.
 #[derive(Clone)]
 pub struct Memo<T> {
     cached_value: Arc<RwLock<Option<T>>>,
@@ -14,16 +11,6 @@ pub struct Memo<T> {
 
 impl<T: Clone + 'static> Memo<T> {
     /// Create a new memo with the given computation function.
-    ///
-    /// The computation runs immediately to establish initial dependencies.
-    ///
-    /// # Example
-    ///
-    /// ```ignore
-    /// let count = Signal::new(5);
-    /// let doubled = Memo::new(move || count.get() * 2);
-    /// assert_eq!(doubled.get(), 10);
-    /// ```
     pub fn new<F>(compute: F) -> Self
     where
         F: Fn() -> T + Send + Sync + 'static,
@@ -42,9 +29,6 @@ impl<T: Clone + 'static> Memo<T> {
     }
 
     /// Get the current value, recomputing if necessary.
-    ///
-    /// This tracks the read in the reactive context and recomputes
-    /// if any dependencies have changed since the last call.
     pub fn get(&self) -> T {
         let runtime = ReactiveRuntime::current();
 
@@ -65,15 +49,6 @@ impl<T: Clone + 'static> Memo<T> {
     }
 
     /// Read the memoized value with a function without cloning.
-    ///
-    /// The read is still tracked for reactivity.
-    ///
-    /// # Example
-    ///
-    /// ```ignore
-    /// let text = Memo::new(|| expensive_string_computation());
-    /// let len = text.with(|s| s.len());
-    /// ```
     pub fn with<R>(&self, f: impl FnOnce(&T) -> R) -> R {
         let runtime = ReactiveRuntime::current();
         runtime.track_read(self.id);
@@ -88,33 +63,5 @@ impl<T: Clone + 'static> Memo<T> {
             let cached = self.cached_value.read().unwrap();
             f(cached.as_ref().unwrap())
         }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::signal::Signal;
-
-    #[test]
-    fn memo_basic() {
-        let count = Signal::new(5);
-        let count_clone = count.clone();
-        let doubled = Memo::new(move || count_clone.get() * 2);
-
-        assert_eq!(doubled.get(), 10);
-
-        count.set(10);
-        assert_eq!(doubled.get(), 20);
-    }
-
-    #[test]
-    fn memo_with() {
-        let count = Signal::new(5);
-        let count_clone = count.clone();
-        let text = Memo::new(move || format!("Count: {}", count_clone.get()));
-
-        let len = text.with(|s| s.len());
-        assert!(len > 0);
     }
 }

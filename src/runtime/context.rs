@@ -25,12 +25,6 @@ impl RuntimeInner {
 }
 
 /// Global reactive runtime for managing reactive primitives.
-///
-/// This handles:
-/// - Dependency tracking
-/// - Reactive graph management
-/// - Batched updates
-/// - Effect scheduling
 pub struct ReactiveRuntime {
     next_id: AtomicUsize,
     inner: Arc<RwLock<RuntimeInner>>,

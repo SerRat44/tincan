@@ -3,9 +3,6 @@ use std::sync::{Arc, RwLock};
 type Subscriber<T> = Box<dyn Fn(&T) + Send + Sync>;
 
 /// A thread-safe store for managing application state.
-///
-/// Stores provide a higher-level abstraction over signals for managing
-/// complex state with automatic change detection.
 pub struct Store<T> {
     state: Arc<RwLock<T>>,
     subscribers: Arc<RwLock<Vec<Subscriber<T>>>>,
@@ -44,8 +41,6 @@ impl<T: Clone> Store<T> {
     }
 
     /// Subscribe to state changes.
-    ///
-    /// The callback will be called whenever the state is updated.
     pub fn subscribe<F>(&self, callback: F)
     where
         F: Fn(&T) + Send + Sync + 'static,
@@ -78,72 +73,5 @@ impl<T: Clone> Clone for Store<T> {
             state: Arc::clone(&self.state),
             subscribers: Arc::clone(&self.subscribers),
         }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use std::sync::atomic::{AtomicUsize, Ordering};
-
-    #[derive(Clone, Debug, PartialEq)]
-    struct AppState {
-        count: usize,
-        name: String,
-    }
-
-    #[test]
-    fn store_get_set() {
-        let store = Store::new(AppState {
-            count: 0,
-            name: "test".to_string(),
-        });
-
-        assert_eq!(store.get().count, 0);
-
-        store.set(AppState {
-            count: 42,
-            name: "updated".to_string(),
-        });
-
-        assert_eq!(store.get().count, 42);
-        assert_eq!(store.get().name, "updated");
-    }
-
-    #[test]
-    fn store_update() {
-        let store = Store::new(AppState {
-            count: 0,
-            name: "test".to_string(),
-        });
-
-        store.update(|state| {
-            state.count += 10;
-        });
-
-        assert_eq!(store.get().count, 10);
-    }
-
-    #[test]
-    fn store_subscribe() {
-        let store = Store::new(AppState {
-            count: 0,
-            name: "test".to_string(),
-        });
-
-        let call_count = Arc::new(AtomicUsize::new(0));
-        let call_count_clone = call_count.clone();
-
-        store.subscribe(move |_state| {
-            call_count_clone.fetch_add(1, Ordering::SeqCst);
-        });
-
-        assert_eq!(call_count.load(Ordering::SeqCst), 0);
-
-        store.update(|state| state.count += 1);
-        assert_eq!(call_count.load(Ordering::SeqCst), 1);
-
-        store.update(|state| state.count += 1);
-        assert_eq!(call_count.load(Ordering::SeqCst), 2);
     }
 }

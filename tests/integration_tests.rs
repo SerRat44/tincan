@@ -32,8 +32,7 @@ fn signal_with() {
 #[test]
 fn signal_map() {
     let count = Signal::new(5);
-    let doubled = count.map(|n| n * 2);
-
+    let (doubled, _guard) = count.map(|n| n * 2);
     assert_eq!(doubled.get(), 10);
 
     count.set(10);

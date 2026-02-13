@@ -129,6 +129,32 @@ store.update(|state| {
 });
 ```
 
+## Examples
+
+Tincan includes comprehensive examples demonstrating different features. Run them with:
+
+```bash
+# Basic signal operations
+cargo run --example basic_signals
+
+# Signal transformations (map, zip)
+cargo run --example signal_combinators
+
+# Memoized computations with caching
+cargo run --example memos
+
+# Reactive effects and side effects
+cargo run --example effects
+
+# High-level state management with Store
+cargo run --example store
+
+# Complete counter application
+cargo run --example counter_app
+```
+
+Each example includes detailed comments and demonstrates best practices for using Tincan.
+
 ## API Overview
 
 ### Signal Methods
