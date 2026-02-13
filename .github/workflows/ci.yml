@@ -91,7 +91,28 @@ jobs:
   examples:
     name: Run Examples
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        example:
+          - basic_signals
+          - signal_combinators
+          - memos
+          - effects
+          - store
+          - counter_app
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
-      - run: cargo run --example "examples/*"
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Run example - ${{ matrix.example }}
+        run: cargo run --example ${{ matrix.example }}
+        timeout-minutes: 2
